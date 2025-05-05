@@ -1,26 +1,36 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from app.document.extract import extract_text
+from fastapi.responses import JSONResponse
+from app.document.batch import process_file,process_text
 from app.db.client import chroma_client
+import asyncio
+from typing import List
 
 router = APIRouter()
 
-@router.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    try:
-        # Extract the text using the extract_text function
-        text = extract_text(file.file, file.filename)
+@router.post("/upload")
+async def upload_files(files: List[UploadFile] = File(...)):
 
-        return {
-            "filename": file.filename,
-            "total_characters": len(text),
-            "text": text
+    file_map = {
+        file.filename: {
+            "text": {},
+            "embedding": {}
         }
+        for file in files
+    }
 
-    except ValueError as ve:
-        raise HTTPException(status_code=415, detail=str(ve))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
-    
+    # Use asyncio.gather to run file processing concurrently
+    await asyncio.gather(*[process_file(file=file, file_map=file_map) for file in files])
+
+    # Batch processing for converting to vector embeddings using sentence transformer
+    await asyncio.gather(*[process_text(filename=filename,file_map= file_map) for filename in file_map])
+
+
+    return JSONResponse(
+        content={
+            "state":file_map
+        }
+    )
+
 @router.get("/health_db")
 async def check_chroma():
     try:
