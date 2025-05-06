@@ -1,9 +1,10 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
-from app.document.batch import process_file,process_text
+from app.document.batch import process_file,process_text,process_embeddings
 from app.db.client import chroma_client
 import asyncio
 from typing import List
+import uuid
 
 router = APIRouter()
 
@@ -13,7 +14,8 @@ async def upload_files(files: List[UploadFile] = File(...)):
     file_map = {
         file.filename: {
             "text": {},
-            "embedding": {}
+            "embedding": {},
+            "uuid": str(uuid.uuid4())
         }
         for file in files
     }
@@ -24,6 +26,8 @@ async def upload_files(files: List[UploadFile] = File(...)):
     # Batch processing for converting to vector embeddings using sentence transformer
     await asyncio.gather(*[process_text(filename=filename,file_map= file_map) for filename in file_map])
 
+    # Batch processing to add embeddings and documents to chromadb
+    await asyncio.gather(*[process_embeddings(filename=filename,file_map= file_map)for filename in file_map])
 
     return JSONResponse(
         content={
