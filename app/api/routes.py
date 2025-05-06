@@ -1,7 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 from app.document.batch import process_file,process_text,process_embeddings
-from app.db.client import chroma_client
+from app.db.client import chroma_client,get_or_create_collection,update_collection_centroid
 import asyncio
 from typing import List
 import uuid
@@ -28,6 +28,8 @@ async def upload_files(files: List[UploadFile] = File(...)):
 
     # Batch processing to add embeddings and documents to chromadb
     await asyncio.gather(*[process_embeddings(filename=filename,file_map= file_map)for filename in file_map])
+
+    update_collection_centroid()
 
     return JSONResponse(
         content={
