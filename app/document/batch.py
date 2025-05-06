@@ -55,7 +55,7 @@ async def  process_embeddings(filename:str, file_map : dict):
             uuid = file_map[filename]["uuid"]
 
             #Add to chroma db collection
-            await add_to_collection(text=text, embedding=embedding, doc_id=uuid)
+            await add_to_collection(text=text, embedding=embedding, doc_id=uuid,filename=filename)
             file_map[filename]["status"] = "success"
 
     except ValueError as ve:

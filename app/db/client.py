@@ -15,6 +15,7 @@ async def add_to_collection(
     text: str,
     embedding: list[float],
     doc_id: str,
+    filename: str,
     collection: Collection = None
 ):
     if collection is None:
@@ -23,5 +24,6 @@ async def add_to_collection(
     collection.add(
         documents=[text],
         embeddings=[embedding],
-        ids=[doc_id]
+        ids=[doc_id],
+        metadatas = {"filename":filename}
     )
