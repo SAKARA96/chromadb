@@ -1,15 +1,12 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.api.routes import router
 from app.db.client import chroma_client
 
 
-app = FastAPI(title="ChromaDB server")
-
-app.include_router(router)
-
-#Event to delete all the collections when the app starts
-@app.on_event("startup")
-async def on_startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup logic - delete all collections
     collection_names = chroma_client.list_collections()
     print(f"Found {len(collection_names)} collections")
 
@@ -18,6 +15,14 @@ async def on_startup():
         collection_name = collection.name
         print(f"Deleting collection: {collection_name}")
         chroma_client.delete_collection(name=collection_name)
+    
+    yield
+    # Shutdown logic (if needed) would go here
+
+
+app = FastAPI(title="ChromaDB ORM Server", lifespan=lifespan)
+
+app.include_router(router)
 
 if __name__ == "__main__":
     import uvicorn
