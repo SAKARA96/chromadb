@@ -1,7 +1,7 @@
 
 from fastapi import  UploadFile
 from app.document.extract import extract_text,generate_embeddings
-from app.db.client import add_to_collection
+from app.db.client import add_to_collection,top_1_collection,get_or_create_collection
 
 
 #Async function to process_file and extract text
@@ -53,10 +53,14 @@ async def  process_embeddings(filename:str, file_map : dict):
             embedding = file_map[filename]["embedding"]["content"]
             text = file_map[filename]["text"]["content"]
             uuid = file_map[filename]["uuid"]
-
-            #Add to chroma db collection
-            await add_to_collection(text=text, embedding=embedding, doc_id=uuid,filename=filename)
+            
+            #identify closest collection to
+            collection_name = await top_1_collection(embedding)
+            collection = get_or_create_collection(collection_name=collection_name)
+            print("collection to add embeddings to:",collection.name)
+            await add_to_collection(text=text, embedding=embedding, doc_id=uuid,filename=filename,collection=collection)
             file_map[filename]["status"] = "success"
+            file_map[filename]["collection_name"] = collection_name
 
     except ValueError as ve:
         file_map[filename]["status"] = "failed"

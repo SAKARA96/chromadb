@@ -29,8 +29,6 @@ async def upload_files(files: List[UploadFile] = File(...)):
     # Batch processing to add embeddings and documents to chromadb
     await asyncio.gather(*[process_embeddings(filename=filename,file_map= file_map)for filename in file_map])
 
-    update_collection_centroid()
-
     return JSONResponse(
         content={
             "state":file_map

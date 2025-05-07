@@ -1,18 +1,23 @@
 from fastapi import FastAPI
 from app.api.routes import router
-from app.db.client import chroma_client,create_collection
+from app.db.client import chroma_client
+
 
 app = FastAPI(title="ChromaDB server")
 
 app.include_router(router)
 
-# Event to create the collection when the app starts
+#Event to delete all the collections when the app starts
 @app.on_event("startup")
 async def on_startup():
-    # Ensure that the 'test' collection is created
-    if "test" not in chroma_client.list_collections():
-        create_collection("test")
-        print("Collection 'test' created.")
+    collection_names = chroma_client.list_collections()
+    print(f"Found {len(collection_names)} collections")
+
+    # Delete each collection
+    for collection in collection_names:
+        collection_name = collection.name
+        print(f"Deleting collection: {collection_name}")
+        chroma_client.delete_collection(name=collection_name)
 
 if __name__ == "__main__":
     import uvicorn
