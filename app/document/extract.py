@@ -6,8 +6,11 @@ import aiofiles
 import pdfplumber
 import docx
 from sentence_transformers import SentenceTransformer
+from app.logger import logger
 
 model = SentenceTransformer('all-MiniLM-L6-v2')
+
+#---------------------------------------------------------------------------------------------------------------
 
 def clean_text(text: str) -> str:
     # Remove escape sequences like \n, \r, \t, etc. (both actual and literal)
@@ -17,38 +20,44 @@ def clean_text(text: str) -> str:
     text = re.sub(r'\s+', ' ', text)                     # Collapse multiple spaces
     return text.strip()
 
+#---------------------------------------------------------------------------------------------------------------
+
 async def extract_text(file_obj, filename: str) -> str:
-    """
-    Extract and clean text from a given file object based on the file extension.
-    Asynchronous version of extract_text that allows parallel processing.
-
-    Args:
-        file_obj: The file object to extract text from
-        filename: The name of the file being processed
-
-    Returns:
-        A cleaned string containing the extracted text.
-    """
     ext = os.path.splitext(filename)[1].lower()
 
-    if ext == ".txt":
-        # For .txt files, directly read from the file object asynchronously
-        content = await asyncio.to_thread(file_obj.read)
-        text = content.decode("utf-8", errors="ignore")
+    logger.debug(f"Extracting text from file: {filename}, detected extension: {ext}")
 
+    try:
+        if ext == ".txt":
+            logger.debug(f"Processing .txt file: {filename}")
+            # For .txt files, directly read from the file object asynchronously
+            content = await asyncio.to_thread(file_obj.read)
+            text = content.decode("utf-8", errors="ignore")
+            logger.debug(f"Successfully extracted text from .txt file: {filename}")
 
-    elif ext == ".pdf":
-        # Wrap pdfplumber in a thread for non-blocking operation
-        text = await asyncio.to_thread(process_pdf, file_obj)
+        elif ext == ".pdf":
+            logger.debug(f"Processing .pdf file: {filename}")
+            # Wrap pdfplumber in a thread for non-blocking operation
+            text = await asyncio.to_thread(process_pdf, file_obj)
+            logger.debug(f"Successfully extracted text from .pdf file: {filename}")
 
-    elif ext == ".docx":
-        # Wrap docx processing in a thread for non-blocking operation
-        text = await asyncio.to_thread(process_docx, file_obj)
+        elif ext == ".docx":
+            logger.debug(f"Processing .docx file: {filename}")
+            # Wrap docx processing in a thread for non-blocking operation
+            text = await asyncio.to_thread(process_docx, file_obj)
+            logger.debug(f"Successfully extracted text from .docx file: {filename}")
 
-    else:
-        raise ValueError("Unsupported file type. Use .txt, .pdf, or .docx.")
+        else:
+            logger.debug(f"Unsupported file type for file: {filename}. File extension: {ext}")
+            raise ValueError("Unsupported file type. Use .txt, .pdf, or .docx.")
 
-    return clean_text(text)
+        return clean_text(text)
+
+    except Exception as e:
+        logger.debug(f"Error occurred while extracting text from file: {filename}. Error: {str(e)}", exc_info=True)
+        raise  # Re-raise the exception to propagate it further
+
+#---------------------------------------------------------------------------------------------------------------
 
 # Helper function to handle PDF processing in a separate thread
 def process_pdf(file_obj):

@@ -2,18 +2,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.api.routes import router
 from app.db.client import chroma_client
-
+from app.logger import logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic - delete all collections
     collection_names = chroma_client.list_collections()
-    print(f"Found {len(collection_names)} collections")
+    logger.info(f"Found {len(collection_names)} collections")
+    # print(f"Found {len(collection_names)} collections")
 
     # Delete each collection
     for collection in collection_names:
         collection_name = collection.name
-        print(f"Deleting collection: {collection_name}")
+        logger.info(f"Deleting collection: {collection_name}")
+        # print(f"Deleting collection: {collection_name}")
         chroma_client.delete_collection(name=collection_name)
     
     yield
