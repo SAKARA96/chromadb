@@ -158,3 +158,32 @@ async def top_1_collection(query_embedding: np.ndarray, threshold: float = 0.65)
         return new_collection_name
 
 #---------------------------------------------------------------------------------------------------------------
+
+async def update_query_centroid(filename:str,file_map:dict):
+    """
+    Gets a file_map object and updates the centroid embedding of the object
+    """
+
+    logger.debug(f"start update_query_centroid for query : {filename}")
+    
+    try:
+        query_object = file_map[filename]
+        if query_object:
+            embeddings = query_object["embedding"]["content"]
+            centroid = np.mean(embeddings,axis=0)
+            file_map[filename]["centroid"] = {
+                "content":centroid,
+                "error":None
+            }
+        else:
+            file_map[filename]["centroid"] = {
+                "content":-1,
+                "error":f"Error calculating centroid"
+            }
+
+    except Exception as e:
+        logger.error(f"An error occurred while updating the centroid for query. Error: {str(e)}", exc_info=True)
+    
+    logger.debug(f"Completed update_query_centroid for query : {filename}")
+
+#---------------------------------------------------------------------------------------------------------------
