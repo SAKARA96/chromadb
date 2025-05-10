@@ -166,25 +166,25 @@ async def top_1_collection(query_embedding: torch.Tensor, threshold: float = 0.6
 
 #---------------------------------------------------------------------------------------------------------------
 
-async def update_query_centroid(filename:str,file_map:dict):
+async def update_query_centroid(query:str,file_map:dict ):
     """
     Gets a file_map object and updates the centroid embedding of the object
     """
 
-    logger.debug(f"start update_query_centroid for query : {filename}")
+    logger.debug(f"start update_query_centroid for query : {query}")
     
     try:
-        query_object = file_map[filename]
+        query_object = file_map[query]
         if query_object:
             embeddings = torch.Tensor(query_object["embedding"]["content"])
             all_embeddings = np.vstack(embeddings)
             centroid = np.mean(all_embeddings, axis=0)
-            file_map[filename]["centroid"] = {
+            file_map[query]["centroid"] = {
                 "content":centroid.tolist(),
                 "error":None
             }
         else:
-            file_map[filename]["centroid"] = {
+            file_map[query]["centroid"] = {
                 "content":-1,
                 "error":f"Error calculating centroid"
             }
@@ -192,6 +192,63 @@ async def update_query_centroid(filename:str,file_map:dict):
     except Exception as e:
         logger.error(f"An error occurred while updating the centroid for query. Error: {str(e)}", exc_info=True)
     
-    logger.debug(f"Completed update_query_centroid for query : {filename}")
+    logger.debug(f"Completed update_query_centroid for query : {query}")
 
 #---------------------------------------------------------------------------------------------------------------
+
+async def update_top_k_collections(query:str, file_map:dict, top_k:int, threshold: float = 0.0):
+    """
+    Gets a file_map and updates the top_k_collections for every query 
+    """
+
+    logger.debug(f"start update_top_k_collections for query : {query}")
+
+    try:
+        query_object = file_map[query]
+        if query_object:
+            if not query_object["centroid"]["error"]:
+                query_centroid = torch.Tensor(file_map[query]["centroid"]["content"])
+                collections_list = chroma_client.list_collections()
+
+                similarity_scores = []
+
+                for collection in collections_list:
+                    logger.debug(f"Fetching centroid for collection: {collection.name}")
+                    centroid_doc = collection.get(ids=["centroid"], include=["embeddings"])
+
+                    if len(centroid_doc['embeddings']) == 0:
+                        logger.warning(f"No centroid embedding found for collection: {collection.name}")
+                        continue
+
+                    centroid_embedding = torch.Tensor(centroid_doc['embeddings'][0])  
+                    similarity_score = torch.nn.functional.cosine_similarity(
+                        query_centroid.unsqueeze(0), 
+                        centroid_embedding.unsqueeze(0), 
+                        dim=1
+                    ).item()
+
+                    if similarity_score > threshold:
+                        similarity_scores.append((collection.name, similarity_score))
+
+                sorted_collections = sorted(similarity_scores, key=lambda x: x[1], reverse=True)
+
+                file_map[query]["top_k_collections"]={
+                    "content":sorted_collections,
+                    "error": None
+                }  
+
+            else:
+                file_map[query]["top_k_collections"] = {
+                "content":[],
+                "error": f"Error getting centroid for query"
+            }    
+        else:
+            file_map[query]["top_k_collections"] = {
+                "content":[],
+                "error": f"Error finding top_k_collections"
+            }
+
+    except Exception as e:
+        logger.error(f"An error occuered while finding top_k_collections for query. Error: {str(e)}",exc_info=True)
+
+    logger.debug(f"Completed update_top_k_collections for query : {query}")

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 from app.document.batch import process_file,process_text,process_embeddings
-from app.db.client import chroma_client,update_query_centroid
+from app.db.client import chroma_client,update_query_centroid,update_top_k_collections
 import app.api.request as request
 from app.logger import logger
 import asyncio
@@ -9,6 +9,8 @@ from typing import List
 import uuid
 
 router = APIRouter()
+
+#---------------------------------------------------------------------------------------------------------------
 
 @router.post("/upload")
 async def upload_files(files: List[UploadFile] = File(...)):
@@ -48,6 +50,8 @@ async def upload_files(files: List[UploadFile] = File(...)):
         }
     )
 
+#---------------------------------------------------------------------------------------------------------------
+
 @router.post("/search/")
 async def search(request: request.SearchRequest):
     
@@ -62,18 +66,25 @@ async def search(request: request.SearchRequest):
     #convert text to embeddings
     logger.info("Starting batch processing for query embeddings...")
     await asyncio.gather(*[process_text(filename=filename,file_map=file_map)for filename in file_map])
-    logger.info("Query embeddings batch processing completed.")
+    logger.info("Query embeddings batch processing completed")
 
     #get centroid embedding mean from query input
-    logger.info("Starting update_query_centroid for all queries")
-    await asyncio.gather(*[update_query_centroid(filename=query,file_map=file_map)for query in file_map])
-    logger.info("update_query_centroid for all queries completed.")
+    logger.info("Starting update_query_centroid for all queries...")
+    await asyncio.gather(*[update_query_centroid(query=query,file_map=file_map)for query in file_map])
+    logger.info("update_query_centroid for all queries completed")
 
+    #update_top_k_collections per query
+    logger.info("Finding top k collections for all queries...")
+    await asyncio.gather(*[update_top_k_collections(query=query,file_map=file_map,top_k=request.top_k_collections)for query in file_map])
+    logger.info("update_top_k_collections for all queries completed")  
+    
     return JSONResponse(
         content={
             "state":file_map
         }
     )
+
+#---------------------------------------------------------------------------------------------------------------
 
 @router.get("/health_db")
 async def check_chroma():
