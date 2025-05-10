@@ -6,6 +6,7 @@ import numpy as np
 import uuid
 import time
 from app.logger import logger
+import torch 
 
 # Initialize Chroma client with persistent storage (if needed)
 chroma_client = chromadb.HttpClient(host='localhost', port=8000)
@@ -26,7 +27,7 @@ async def add_to_collection(
     # Log the function entry and input parameters
     logger.debug(f"add_to_collection called with doc_id: {doc_id}, filename: {filename}, collection: {collection}")
 
-    if collection is None:
+    if collection == None:
         logger.debug("No collection provided. Creating a new collection with the name 'test'.")
         collection = get_or_create_collection(collection_name="test")
 
@@ -73,13 +74,14 @@ async def update_collection_centroid(collection: Collection):
 
         # Filter out the embeddings for the centroid calculation
         filtered_embeddings = [
-            emb for doc_id, emb in zip(ids, embeddings) if doc_id != "centroid"
+            torch.Tensor(emb) for doc_id, emb in zip(ids, embeddings) if doc_id != "centroid"
         ]
         logger.debug(f"Filtered out centroid embedding. {len(filtered_embeddings)} embeddings will be used to calculate the centroid.")
 
         # Calculate the centroid
         logger.debug(f"Calculating centroid from {len(filtered_embeddings)} embeddings...")
-        centroid = np.mean(filtered_embeddings, axis=0)
+        all_embeddings = np.vstack(filtered_embeddings)
+        centroid = np.mean(all_embeddings, axis=0)
         logger.debug("Centroid calculated successfully.")
 
         centroid_metadata = {
@@ -90,7 +92,7 @@ async def update_collection_centroid(collection: Collection):
         logger.debug(f"Adding centroid document to the collection with id 'centroid'.")
         collection.add(
             documents=["Centroid Document"],
-            embeddings=[centroid],
+            embeddings=[centroid.tolist()],
             metadatas=[centroid_metadata],
             ids=["centroid"]
         )
@@ -102,7 +104,7 @@ async def update_collection_centroid(collection: Collection):
 
 #---------------------------------------------------------------------------------------------------------------
 
-async def top_1_collection(query_embedding: np.ndarray, threshold: float = 0.65) -> str:
+async def top_1_collection(query_embedding: torch.Tensor, threshold: float = 0.65) -> str:
     client = chroma_client
 
     logger.debug(f"top_1_collection called with threshold: {threshold}")
@@ -135,8 +137,13 @@ async def top_1_collection(query_embedding: np.ndarray, threshold: float = 0.65)
                 await update_collection_centroid(collection=collection)
                 centroid_doc = collection.get(ids=["centroid"], include=["embeddings"])
 
-            centroid_embedding = np.array(centroid_doc['embeddings'][0])
-            similarity_score = cosine_similarity([query_embedding], [centroid_embedding])[0][0]
+
+            centroid_embedding = torch.Tensor(centroid_doc['embeddings'][0])  
+            similarity_score = torch.nn.functional.cosine_similarity(
+                query_embedding.unsqueeze(0), 
+                centroid_embedding.unsqueeze(0), 
+                dim=1
+            ).item()
             logger.debug(f"Similarity score for collection {collection_name}: {similarity_score}")
 
             if similarity_score > highest_similarity:
@@ -169,10 +176,11 @@ async def update_query_centroid(filename:str,file_map:dict):
     try:
         query_object = file_map[filename]
         if query_object:
-            embeddings = query_object["embedding"]["content"]
-            centroid = np.mean(embeddings,axis=0)
+            embeddings = torch.Tensor(query_object["embedding"]["content"])
+            all_embeddings = np.vstack(embeddings)
+            centroid = np.mean(all_embeddings, axis=0)
             file_map[filename]["centroid"] = {
-                "content":centroid,
+                "content":centroid.tolist(),
                 "error":None
             }
         else:

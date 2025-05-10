@@ -7,6 +7,7 @@ import pdfplumber
 import docx
 from sentence_transformers import SentenceTransformer
 from app.logger import logger
+from torch import Tensor
 
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
@@ -75,7 +76,7 @@ def process_docx(file_obj):
 async def generate_embeddings(text: str):
     return await asyncio.to_thread(_generate_embeddings, text)
 
-def _generate_embeddings(text: str):
+def _generate_embeddings(text: str) -> Tensor:
     # Use SentenceTransformer to encode the text into embeddings
     embeddings = model.encode(text)
     return embeddings

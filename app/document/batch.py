@@ -3,6 +3,7 @@ from fastapi import UploadFile
 from app.document.extract import extract_text,generate_embeddings
 from app.db.client import add_to_collection,top_1_collection,get_or_create_collection
 from app.logger import logger
+from torch import Tensor
 
 #---------------------------------------------------------------------------------------------------------------
 
@@ -85,7 +86,7 @@ async def process_embeddings(filename: str, file_map: dict):
 
             logger.info(f"Embeddings are available for file: {filename}. Identifying closest collection.")
             
-            collection_name = await top_1_collection(embedding)
+            collection_name = await top_1_collection(Tensor(embedding))
             collection = get_or_create_collection(collection_name=collection_name)
             
             logger.info(f"Collection identified: {collection.name}. Adding embeddings to the collection.")
