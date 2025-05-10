@@ -39,7 +39,7 @@ async def add_to_collection(
             documents=[text],
             embeddings=[embedding],
             ids=[doc_id],
-            metadatas=[{"filename": filename}]
+            metadatas=[{"filename": filename, "is_centroid":False}]
         )
         
         logger.debug(f"Successfully added document with doc_id: {doc_id} to collection: {collection.name}")
@@ -85,7 +85,8 @@ async def update_collection_centroid(collection: Collection):
         logger.debug("Centroid calculated successfully.")
 
         centroid_metadata = {
-            "description": "Centroid embedding of the collection"
+            "description": "Centroid embedding of the collection",
+            "is_centroid": True
         }
 
         # Add the centroid embedding as a new document
@@ -104,7 +105,7 @@ async def update_collection_centroid(collection: Collection):
 
 #---------------------------------------------------------------------------------------------------------------
 
-async def top_1_collection(query_embedding: torch.Tensor, threshold: float = 0.65) -> str:
+async def top_1_collection(query_embedding: torch.Tensor, threshold: float = 0.35) -> str:
     client = chroma_client
 
     logger.debug(f"top_1_collection called with threshold: {threshold}")
@@ -227,8 +228,7 @@ async def update_top_k_collections(query:str, file_map:dict, top_k:int, threshol
                         dim=1
                     ).item()
 
-                    if similarity_score > threshold:
-                        similarity_scores.append((collection.name, similarity_score))
+                    similarity_scores.append((collection.name, similarity_score))
 
                 sorted_collections = sorted(similarity_scores, key=lambda x: x[1], reverse=True)
 
@@ -252,3 +252,45 @@ async def update_top_k_collections(query:str, file_map:dict, top_k:int, threshol
         logger.error(f"An error occuered while finding top_k_collections for query. Error: {str(e)}",exc_info=True)
 
     logger.debug(f"Completed update_top_k_collections for query : {query}")
+
+#---------------------------------------------------------------------------------------------------------------
+
+async def update_top_k_documents(query:str,file_map:dict,top_k:int):
+    """
+    Gets a file_map and query and tries to find relevant documents from a collection to send as additional context
+    """
+
+    logger.debug("start update_top_k_documents for query : {query}")
+
+    try:
+        query_object = file_map[query]
+        if query_object:
+            query_embedding = query_object["embedding"]["content"]
+            collection_list = query_object["top_k_collections"]["content"]
+            file_map[query]["top_k_documents"] = {
+                "content":[],
+                "error":None
+            }
+            for collection_obj in collection_list:
+                collection_name = collection_obj[0]
+                logger.info(f"collection_name {collection_name}")
+                collection = chroma_client.get_collection(name=collection_name)
+                
+                results = collection.query(
+                    query_embeddings=query_embedding,
+                    n_results=top_k,include=["documents"],
+                    where={"is_centroid": False}
+                )
+
+                file_map[query]["top_k_documents"]["content"].extend(results["documents"][0])
+        else:
+            file_map[query]["top_k_documents"] = {
+                "content":[],
+                "error": f"Error finding top_k_documents"
+            }
+
+    
+    except Exception as e:
+        logger.error(f"An error occuered while finding top_k_documents for query. Error : {str(e)}",exc_info=True)
+    
+    logger.debug(f"Completed update_top_k_documents for query : {query}")

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 from app.document.batch import process_file,process_text,process_embeddings
-from app.db.client import chroma_client,update_query_centroid,update_top_k_collections
+from app.db.client import chroma_client,update_query_centroid,update_top_k_collections,update_top_k_documents
 import app.api.request as request
 from app.logger import logger
 import asyncio
@@ -77,6 +77,12 @@ async def search(request: request.SearchRequest):
     logger.info("Finding top k collections for all queries...")
     await asyncio.gather(*[update_top_k_collections(query=query,file_map=file_map,top_k=request.top_k_collections)for query in file_map])
     logger.info("update_top_k_collections for all queries completed")  
+
+    #update_top_k_documents per query
+    logger.info("Finding update_top_k_documents for all queries...")
+    await asyncio.gather(*[update_top_k_documents(query=query,file_map=file_map,top_k=request.top_k_documents)for query in file_map])
+    logger.info("update_top_k_documents for all queries completed")  
+    
     
     return JSONResponse(
         content={
