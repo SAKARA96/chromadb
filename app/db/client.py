@@ -75,8 +75,8 @@ async def update_collection_centroid(collection: Collection):
 
         # Calculate the centroid
         logger.debug(f"Calculating centroid from {len(filtered_embeddings)} embeddings...")
-        all_embeddings = np.vstack(filtered_embeddings)
-        centroid = np.mean(all_embeddings, axis=0)
+        stacked_embeddings = torch.stack(filtered_embeddings)
+        avg_query_embedding = torch.mean(stacked_embeddings, dim=0)
         logger.debug("Centroid calculated successfully.")
 
         centroid_metadata = {
@@ -88,7 +88,7 @@ async def update_collection_centroid(collection: Collection):
         logger.debug(f"Adding centroid document to the collection with id 'centroid'.")
         collection.add(
             documents=["Centroid Document"],
-            embeddings=[centroid.tolist()],
+            embeddings=[avg_query_embedding.tolist()],
             metadatas=[centroid_metadata],
             ids=["centroid"]
         )

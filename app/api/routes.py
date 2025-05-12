@@ -65,7 +65,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
     logger.info("File upload and processing completed.")
     
     return JSONResponse(
-       content={
+        content={
             "state": [upload_doc.to_dict() for filename, upload_doc in file_map.items()]
         }
     )
