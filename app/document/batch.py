@@ -4,7 +4,8 @@ from app.document.extract import extract_text,generate_embeddings
 from app.db.client import add_to_collection,top_1_collection,get_or_create_collection
 from app.api.request import Status,StatusEnum
 from app.logger import logger
-from torch import Tensor
+import torch
+from app.document.extract import device
 from app.api.request import BaseDocument,UploadDocument
 from app.document.extract import text_splitter
 
@@ -61,6 +62,7 @@ async def process_text(filename:str, upload_document: BaseDocument):
         logger.error(f"Error occurred while generating embeddings for file {filename}: {str(e)}", exc_info=True)
 
 #---------------------------------------------------------------------------------------------------------------
+BATCH_SIZE = 5
 
 async def process_embeddings(filename:str, upload_document: UploadDocument):
     try:
@@ -72,17 +74,30 @@ async def process_embeddings(filename:str, upload_document: UploadDocument):
             uuid = upload_document.uuid
             vectordb_embedding = upload_document.embedding.vectordb_embeddings
 
+            assert len(embedding) == len(text), "Mismatch between number of embeddings and text chunks"
+
+            total_chunks = len(embedding)
+
             logger.info(f"Embeddings are available for file: {filename}. Identifying closest collection.")
+            collection_set = set()
+
+            for batch_start in range(0, total_chunks, BATCH_SIZE):
+                batch_end = min(batch_start + BATCH_SIZE, total_chunks)
+
+                batch_embeddings = embedding[batch_start:batch_end]
+                vectodb_batch_embeddings = vectordb_embedding[batch_start:batch_end]
+                batch_texts = text[batch_start:batch_end]
+
+                collection_name = await top_1_collection(batch_embeddings)
+                collection = get_or_create_collection(collection_name=collection_name)
             
-            collection_name = await top_1_collection(embedding)
-            collection = get_or_create_collection(collection_name=collection_name)
+                logger.info(f"Collection identified: {collection.name}. Adding embeddings to the collection.")
             
-            logger.info(f"Collection identified: {collection.name}. Adding embeddings to the collection.")
-            
-            await add_to_collection(text=text, embedding=vectordb_embedding, start_idx=0, filename=filename, collection=collection)
-            
+                await add_to_collection(text=batch_texts, embedding=vectodb_batch_embeddings, start_idx=batch_start, filename=filename, collection=collection)
+                collection_set.add(collection_name)
+
             upload_document.status = Status(code=StatusEnum.SUCCESS,error=None)
-            upload_document.collection = collection_name
+            upload_document.collection = list(collection_set)
 
             logger.info(f"Successfully added embeddings to collection {collection.name} for file: {filename}")
 

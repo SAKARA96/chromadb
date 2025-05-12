@@ -211,7 +211,6 @@ async def update_top_k_collections(query:str, document:SearchDocument, top_k:int
             query_centroid = document.centroid.content
             stacked_embeddings = torch.stack(query_centroid)
             avg_query_embedding = torch.mean(stacked_embeddings, dim=0).to(device=device)
-            # avg_query_embedding = avg_query_embedding.to(device=device)
             
             collections_list = chroma_client.list_collections()
             similarity_scores = []
@@ -233,7 +232,7 @@ async def update_top_k_collections(query:str, document:SearchDocument, top_k:int
                 similarity_scores.append((collection.name, similarity_score))
 
             sorted_collections = sorted(similarity_scores, key=lambda x: x[1], reverse=True)
-            collection_names = [name for name, _ in sorted_collections]
+            collection_names = [name for name, _ in sorted_collections[:top_k]]
             
             document.top_k_collections = collection_names
         

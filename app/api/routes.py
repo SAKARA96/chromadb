@@ -1,6 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 from app.document.batch import process_file,process_text,process_embeddings
+from app.document.extract import text_splitter
 from app.db.client import chroma_client,update_query_centroid,update_top_k_collections,update_top_k_documents
 import app.api.request as request
 from app.logger import logger
@@ -17,7 +18,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
     logger.info(f"Starting file upload for {len(files)} files.")
 
     file_map = {
-       file.filename: request.create_upload_document()  # Use the factory function for each file
+        file.filename: request.create_upload_document()  # Use the factory function for each file
         for file in files
     }
 
@@ -75,13 +76,13 @@ async def upload_files(files: List[UploadFile] = File(...)):
 @router.post("/search/")
 async def search(requestParam: request.SearchRequest):
 
-    queries = [requestParam.query]
+    chunks = text_splitter.split_text(requestParam.query)
 
     file_map = {
         idx: request.create_search_document(
             text=query
         )
-        for idx, query in enumerate(queries)
+        for idx, query in enumerate(chunks)
     }
 
     #convert text to embeddings
@@ -103,7 +104,7 @@ async def search(requestParam: request.SearchRequest):
         *[
             update_query_centroid(
                 filename=query,
-                document=file_map[query]
+                document=file_map[query],
             )
             for query in file_map
         ]

@@ -23,9 +23,9 @@ model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
 
 #text_splitter to chunk input document
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500,      # Target chunk size (in characters or tokens)
-    chunk_overlap=50,    # Overlap to preserve context
-    separators=["\n\n", "\n", ".", " ", ""],  # Split on paragraphs, sentences, etc.
+    chunk_size=500,      
+    chunk_overlap=50,    
+    separators=["\n\n", "\n", ".", " ", ""],
 )
 
 #---------------------------------------------------------------------------------------------------------------

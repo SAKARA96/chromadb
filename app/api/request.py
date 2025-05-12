@@ -4,7 +4,6 @@ from enum import Enum
 import uuid
 import torch 
 
-
 def tensor_to_list(tensors: Optional[List[torch.Tensor]]) -> List:
     if not tensors:
         return []
@@ -73,7 +72,7 @@ class Status:
 @dataclass
 class UploadDocument(BaseDocument):
     status: Optional[Status] = None
-    collection: Optional[str] = None
+    collection: Optional[List[str]] = None
 
     def to_dict(self):
         data = super().to_dict()
@@ -98,11 +97,10 @@ class SearchDocument(BaseDocument):
         })
         return data
 
-
 @dataclass
 class SearchRequest:
     query: str
-    top_k_collections: int = 5
+    top_k_collections: int = 1
     top_k_documents: int = 5
 
 def create_search_document(text:str) -> SearchDocument:
@@ -129,5 +127,5 @@ def create_upload_document() -> UploadDocument:
         embedding=embedding_data,
         uuid=str(uuid.uuid4()), 
         status=Status(code=StatusEnum.INIT, error=None),
-        collection=None,
+        collection=[],
     )
