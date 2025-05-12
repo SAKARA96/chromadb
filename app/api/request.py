@@ -32,13 +32,14 @@ class Embedding:
     def to_dict(self):
         return {
             "content": tensor_to_list(self.content),
-            "shape": self.shape
+            "shape": self.shape,
+            "vectordb_embeddings": len(self.vectordb_embeddings)
         }
 
     def convert_to_list_floats(self):
         self.vectordb_embeddings = []
         for embed in self.content:
-            self.vectordb_embeddings.extend(embed.tolist())
+            self.vectordb_embeddings.append(embed.tolist())
 
 @dataclass
 class BaseDocument:

@@ -6,6 +6,7 @@ from app.api.request import Status,StatusEnum
 from app.logger import logger
 from torch import Tensor
 from app.api.request import BaseDocument,UploadDocument
+from app.document.extract import text_splitter
 
 #---------------------------------------------------------------------------------------------------------------
 
@@ -13,9 +14,10 @@ async def process_file(file: UploadFile, upload_document: BaseDocument):
     try:
         logger.info(f"Started processing file: {file.filename}")
         text = await extract_text(file.file, file.filename)
-        upload_document.text.content = [text]
+        chunks = text_splitter.split_text(text)
+        upload_document.text.content = chunks
         upload_document.text.error = None 
-        upload_document.text.shape = [len(text)]
+        upload_document.text.shape = [len(chunks)]
         
         logger.info(f"Successfully extracted text from file: {file.filename}, with {len(text)} characters.")
         
@@ -77,7 +79,7 @@ async def process_embeddings(filename:str, upload_document: UploadDocument):
             
             logger.info(f"Collection identified: {collection.name}. Adding embeddings to the collection.")
             
-            await add_to_collection(text=text, embedding=vectordb_embedding, doc_id=uuid, filename=filename, collection=collection)
+            await add_to_collection(text=text, embedding=vectordb_embedding, start_idx=0, filename=filename, collection=collection)
             
             upload_document.status = Status(code=StatusEnum.SUCCESS,error=None)
             upload_document.collection = collection_name

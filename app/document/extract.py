@@ -2,17 +2,31 @@ import asyncio
 import re
 import os
 from io import BytesIO
-import aiofiles
 import pdfplumber
 import docx
 from sentence_transformers import SentenceTransformer
 from app.logger import logger
-from torch import Tensor,cuda
+import torch
 from typing import List
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-device = 'cuda' if cuda.is_available() else 'cpu'
+# Determine device based on platform capabilities
+if torch.cuda.is_available():
+    device = 'cuda'
+elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
+    device = 'mps'  # For Apple Silicon (macOS)
+else:
+    device = 'cpu'
 
-model = SentenceTransformer('all-MiniLM-L6-v2',device=device)
+# Load model with correct device
+model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
+
+#text_splitter to chunk input document
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=500,      # Target chunk size (in characters or tokens)
+    chunk_overlap=50,    # Overlap to preserve context
+    separators=["\n\n", "\n", ".", " ", ""],  # Split on paragraphs, sentences, etc.
+)
 
 #---------------------------------------------------------------------------------------------------------------
 
@@ -79,8 +93,8 @@ def process_docx(file_obj):
 async def generate_embeddings(texts: List[str]):
     return await asyncio.to_thread(_generate_embeddings, texts)
 
-def _generate_embeddings(texts: List[str]) -> List[Tensor]:
-    embeddings_list: List[Tensor] = []
+def _generate_embeddings(texts: List[str]) -> List[torch.Tensor]:
+    embeddings_list: List[torch.Tensor] = []
     for text in texts:
         embedding = model.encode(text, convert_to_tensor=True)
         embeddings_list.append(embedding)

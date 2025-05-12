@@ -15,40 +15,51 @@ from typing import List
 chroma_client = chromadb.HttpClient(host='localhost', port=8000)
 
 def get_or_create_collection(collection_name: str):
-    """Gets or creates a ChromaDB collection and returns the collection object."""
     return chroma_client.get_or_create_collection(name=collection_name)
+
+def generate_doc_ids(filename:str, num_chunks:int, start_idx:int):
+    return [f"{filename}_chunk_{start_idx + idx}" for idx in range(num_chunks)]
+
+def generate_metadatas(filename: str, num_chunks: int, start_idx: int , is_centroid: bool = False):
+    return  [
+                {
+                    "filename": f"{filename}_chunk_{start_idx + idx}", 
+                    "is_centroid": is_centroid
+                } 
+                for idx in range(num_chunks)
+            ]
+
 
 #---------------------------------------------------------------------------------------------------------------
 
 async def add_to_collection(
     text: List[str],
     embedding: List[List[float]],
-    doc_id: str,
     filename: str,
+    start_idx: int,
     collection: Collection = None
 ):
     # Log the function entry and input parameters
-    logger.debug(f"add_to_collection called with doc_id: {doc_id}, filename: {filename}, collection: {collection}")
+    logger.debug(f"add_to_collection called with start_idx: {start_idx}, filename: {filename}, collection: {collection}")
 
     try:
         logger.debug(f"Adding document to collection: {collection.name}")
-        
         # Add the document to the collection
         collection.add(
             documents=text,
             embeddings=embedding,
-            ids=[doc_id],
-            metadatas=[{"filename": filename, "is_centroid":False}]
+            ids=generate_doc_ids(filename=filename,num_chunks=len(text),start_idx=start_idx),
+            metadatas=generate_metadatas(filename=filename,num_chunks=len(text),start_idx=start_idx)
         )
         
-        logger.debug(f"Successfully added document with doc_id: {doc_id} to collection: {collection.name}")
+        logger.debug(f"Successfully added documents with start_idx: {start_idx} to collection: {collection.name}")
 
         # Update the collection centroid
         await update_collection_centroid(collection=collection)
         logger.debug(f"Collection centroid updated for collection: {collection.name}")
 
     except Exception as e:
-        logger.error(f"An error occurred while adding the document with doc_id: {doc_id} to collection: {collection.name}. Error: {e}", exc_info=True)
+        logger.error(f"An error occurred while adding the document with start_idx: {start_idx} to collection: {collection.name}. Error: {e}", exc_info=True)
 
 #---------------------------------------------------------------------------------------------------------------
 
@@ -116,7 +127,7 @@ async def top_1_collection(query_embedding: List[torch.Tensor], threshold: float
         return new_collection_name
 
     stacked_embeddings = torch.stack(query_embedding)
-    avg_query_embedding = torch.mean(stacked_embeddings, dim=0)
+    avg_query_embedding = torch.mean(stacked_embeddings, dim=0).to(device=device)
     
     best_collection = None
     highest_similarity = -1
@@ -137,7 +148,7 @@ async def top_1_collection(query_embedding: List[torch.Tensor], threshold: float
                 centroid_doc = collection.get(ids=["centroid"], include=["embeddings"])
 
 
-            centroid_embedding = torch.Tensor(centroid_doc['embeddings'][0])  
+            centroid_embedding = torch.Tensor(centroid_doc['embeddings'][0]).to(device=device)
             similarity_score = torch.nn.functional.cosine_similarity(
                 avg_query_embedding.unsqueeze(0), 
                 centroid_embedding.unsqueeze(0), 
