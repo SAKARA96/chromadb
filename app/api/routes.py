@@ -17,11 +17,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
     logger.info(f"Starting file upload for {len(files)} files.")
 
     file_map = {
-        file.filename: {
-            "text": {},
-            "embedding": {},
-            "uuid": str(uuid.uuid4())
-        }
+       file.filename: request.create_upload_document()  # Use the factory function for each file
         for file in files
     }
 
@@ -29,24 +25,24 @@ async def upload_files(files: List[UploadFile] = File(...)):
 
     # Use asyncio.gather to run file processing concurrently
     logger.info("Starting file processing...")
-    await asyncio.gather(*[process_file(file=file, file_map=file_map) for file in files])
+    await asyncio.gather(*[process_file(file=file, upload_document=file_map[file.filename]) for file in files])
     logger.info("File processing completed.")
 
     # Batch processing for converting to vector embeddings using sentence transformer
     logger.info("Starting batch processing for text embeddings...")
-    await asyncio.gather(*[process_text(filename=filename,file_map= file_map) for filename in file_map])
+    await asyncio.gather(*[process_text(filename=filename, upload_document=file_map[filename]) for filename in file_map])
     logger.info("Text embeddings batch processing completed.")
 
-    # Batch processing to add embeddings and documents to chromadb
+    # # Batch processing to add embeddings and documents to chromadb
     logger.info("Starting batch processing to add embeddings to chromadb...")
-    await asyncio.gather(*[process_embeddings(filename=filename,file_map= file_map)for filename in file_map])
+    await asyncio.gather(*[process_embeddings(filename=filename, upload_document=file_map[filename]) for filename in file_map])
     logger.info("Embeddings and documents added to chromadb.")
 
     logger.info("File upload and processing completed.")
 
     return JSONResponse(
-        content={
-            "state":file_map
+       content={
+            "state": [upload_doc.to_dict() for filename, upload_doc in file_map.items()]
         }
     )
 

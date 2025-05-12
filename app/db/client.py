@@ -7,6 +7,7 @@ import uuid
 import time
 from app.logger import logger
 import torch 
+from typing import List
 
 # Initialize Chroma client with persistent storage (if needed)
 chroma_client = chromadb.HttpClient(host='localhost', port=8000)
@@ -59,10 +60,6 @@ async def update_collection_centroid(collection: Collection):
     """
     logger.debug(f"update_collection_centroid called for collection: {collection.name if collection else 'Unnamed'}")
 
-    if collection is None:
-        logger.debug("No collection provided. Creating a new collection with the name 'test'.")
-        collection = get_or_create_collection(collection_name="test")
-
     try:
         # Fetch all documents from the collection
         logger.debug("Fetching all documents from the collection...")
@@ -105,7 +102,7 @@ async def update_collection_centroid(collection: Collection):
 
 #---------------------------------------------------------------------------------------------------------------
 
-async def top_1_collection(query_embedding: torch.Tensor, threshold: float = 0.35) -> str:
+async def top_1_collection(query_embedding: List[torch.Tensor], threshold: float = 0.35) -> str:
     client = chroma_client
 
     logger.debug(f"top_1_collection called with threshold: {threshold}")
@@ -119,6 +116,9 @@ async def top_1_collection(query_embedding: torch.Tensor, threshold: float = 0.3
         logger.debug(f"No collections found. Creating a new collection: {new_collection_name}")
         get_or_create_collection(new_collection_name)
         return new_collection_name
+
+    stacked_embeddings = torch.stack(query_embedding)
+    avg_query_embedding = torch.mean(stacked_embeddings, dim=0)
     
     best_collection = None
     highest_similarity = -1
@@ -141,7 +141,7 @@ async def top_1_collection(query_embedding: torch.Tensor, threshold: float = 0.3
 
             centroid_embedding = torch.Tensor(centroid_doc['embeddings'][0])  
             similarity_score = torch.nn.functional.cosine_similarity(
-                query_embedding.unsqueeze(0), 
+                avg_query_embedding.unsqueeze(0), 
                 centroid_embedding.unsqueeze(0), 
                 dim=1
             ).item()

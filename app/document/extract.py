@@ -8,6 +8,7 @@ import docx
 from sentence_transformers import SentenceTransformer
 from app.logger import logger
 from torch import Tensor
+from typing import List
 
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
@@ -73,10 +74,12 @@ def process_docx(file_obj):
 
 
 # Modify the embedding generation function to use SentenceTransformer
-async def generate_embeddings(text: str):
-    return await asyncio.to_thread(_generate_embeddings, text)
+async def generate_embeddings(texts: List[str]):
+    return await asyncio.to_thread(_generate_embeddings, texts)
 
-def _generate_embeddings(text: str) -> Tensor:
-    # Use SentenceTransformer to encode the text into embeddings
-    embeddings = model.encode(text)
-    return embeddings
+def _generate_embeddings(texts: List[str]) -> List[Tensor]:
+    embeddings_list: List[Tensor] = []
+    for text in texts:
+        embedding = model.encode(text, convert_to_tensor=True)
+        embeddings_list.append(embedding)
+    return embeddings_list
