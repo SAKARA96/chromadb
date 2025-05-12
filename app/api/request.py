@@ -26,14 +26,12 @@ class Text:
 @dataclass
 class Embedding:
     content: Optional[List[torch.Tensor]] = field(default_factory=list)
-    vectordb_embeddings: Optional[List[float]] = field(default_factory=list)
-    error: Optional[str] = None
+    vectordb_embeddings: Optional[List[List[float]]] = field(default_factory=list)
     shape: List[int] = field(default_factory=list)
 
     def to_dict(self):
         return {
             "content": tensor_to_list(self.content),
-            "error": self.error,
             "shape": self.shape
         }
 
@@ -90,15 +88,39 @@ class SearchDocument(BaseDocument):
     top_k_collections: List[str] = field(default_factory=list)
     top_k_results: List[str] = field(default_factory=list)
 
+    def to_dict(self):
+        data = super().to_dict()
+        data.update({
+            "centroid": self.centroid.to_dict() if self.centroid else None,
+            "top_k_collections": self.top_k_collections,
+            "top_k_results": self.top_k_results
+        })
+        return data
+
+
 @dataclass
 class SearchRequest:
     query: str
     top_k_collections: int = 5
     top_k_documents: int = 5
 
+def create_search_document(text:str) -> SearchDocument:
+    text_data = Text(content=[text], error=None, shape=[])
+    embedding_data = Embedding(content=[torch.empty(0)], shape=[])
+    centroid_data = Embedding(content=[torch.empty(0)],shape=[])
+
+    return SearchDocument(
+        text=text_data,
+        embedding=embedding_data,
+        uuid=str(uuid.uuid4()),
+        centroid=centroid_data,
+        top_k_collections=[],
+        top_k_results=[],
+    )
+
 def create_upload_document() -> UploadDocument:
     text_data = Text(content=[""], error=None, shape=[])
-    embedding_data = Embedding(content=[torch.empty(0)], error=None, shape=[])
+    embedding_data = Embedding(content=[torch.empty(0)],shape=[])
     
     # Create the UploadDocument instance
     return UploadDocument(

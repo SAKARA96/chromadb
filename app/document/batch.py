@@ -5,11 +5,11 @@ from app.db.client import add_to_collection,top_1_collection,get_or_create_colle
 from app.api.request import Status,StatusEnum
 from app.logger import logger
 from torch import Tensor
-from app.api.request import UploadDocument
+from app.api.request import BaseDocument,UploadDocument
 
 #---------------------------------------------------------------------------------------------------------------
 
-async def process_file(file: UploadFile, upload_document: UploadDocument):
+async def process_file(file: UploadFile, upload_document: BaseDocument):
     try:
         logger.info(f"Started processing file: {file.filename}")
         text = await extract_text(file.file, file.filename)
@@ -31,7 +31,7 @@ async def process_file(file: UploadFile, upload_document: UploadDocument):
 
 #---------------------------------------------------------------------------------------------------------------
 
-async def process_text(filename:str, upload_document: UploadDocument):
+async def process_text(filename:str, upload_document: BaseDocument):
     try:
         logger.info(f"Started processing text for file: {filename}")
 
@@ -68,6 +68,7 @@ async def process_embeddings(filename:str, upload_document: UploadDocument):
             embedding = upload_document.embedding.content
             text = upload_document.text.content
             uuid = upload_document.uuid
+            vectordb_embedding = upload_document.embedding.vectordb_embeddings
 
             logger.info(f"Embeddings are available for file: {filename}. Identifying closest collection.")
             
@@ -76,7 +77,7 @@ async def process_embeddings(filename:str, upload_document: UploadDocument):
             
             logger.info(f"Collection identified: {collection.name}. Adding embeddings to the collection.")
             
-            await add_to_collection(text=text, embedding=embedding, doc_id=uuid, filename=filename, collection=collection)
+            await add_to_collection(text=text, embedding=vectordb_embedding, doc_id=uuid, filename=filename, collection=collection)
             
             upload_document.status = Status(code=StatusEnum.SUCCESS,error=None)
             upload_document.collection = collection_name

@@ -7,10 +7,12 @@ import pdfplumber
 import docx
 from sentence_transformers import SentenceTransformer
 from app.logger import logger
-from torch import Tensor
+from torch import Tensor,cuda
 from typing import List
 
-model = SentenceTransformer('all-MiniLM-L6-v2')
+device = 'cuda' if cuda.is_available() else 'cpu'
+
+model = SentenceTransformer('all-MiniLM-L6-v2',device=device)
 
 #---------------------------------------------------------------------------------------------------------------
 

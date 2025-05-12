@@ -25,21 +25,45 @@ async def upload_files(files: List[UploadFile] = File(...)):
 
     # Use asyncio.gather to run file processing concurrently
     logger.info("Starting file processing...")
-    await asyncio.gather(*[process_file(file=file, upload_document=file_map[file.filename]) for file in files])
+    await asyncio.gather(
+        *[
+            process_file(
+                file=file,
+                upload_document=file_map[file.filename]
+            )
+            for file in files
+        ]
+    )
     logger.info("File processing completed.")
 
     # Batch processing for converting to vector embeddings using sentence transformer
     logger.info("Starting batch processing for text embeddings...")
-    await asyncio.gather(*[process_text(filename=filename, upload_document=file_map[filename]) for filename in file_map])
+    await asyncio.gather(
+        *[
+            process_text(
+                filename=filename,
+                upload_document=file_map[filename]
+            )
+            for filename in file_map
+        ]
+    )
     logger.info("Text embeddings batch processing completed.")
 
-    # # Batch processing to add embeddings and documents to chromadb
+    # Batch processing to add embeddings and documents to chromadb
     logger.info("Starting batch processing to add embeddings to chromadb...")
-    await asyncio.gather(*[process_embeddings(filename=filename, upload_document=file_map[filename]) for filename in file_map])
+    await asyncio.gather(
+        *[
+            process_embeddings(
+                filename=filename,
+                upload_document=file_map[filename]
+            )
+            for filename in file_map
+        ]
+    )
     logger.info("Embeddings and documents added to chromadb.")
 
     logger.info("File upload and processing completed.")
-
+    
     return JSONResponse(
        content={
             "state": [upload_doc.to_dict() for filename, upload_doc in file_map.items()]
@@ -49,40 +73,76 @@ async def upload_files(files: List[UploadFile] = File(...)):
 #---------------------------------------------------------------------------------------------------------------
 
 @router.post("/search/")
-async def search(request: request.SearchRequest):
-    
+async def search(requestParam: request.SearchRequest):
+
+    queries = [requestParam.query]
+
     file_map = {
-        "query":{
-            "text":{"content":request.query, "total_characters":len(request.query),"error":None},
-            "embedding":{},
-            "uuid":str(uuid.uuid4())
-        }
+        idx: request.create_search_document(
+            text=query
+        )
+        for idx, query in enumerate(queries)
     }
 
     #convert text to embeddings
     logger.info("Starting batch processing for query embeddings...")
-    await asyncio.gather(*[process_text(filename=filename,file_map=file_map)for filename in file_map])
+    await asyncio.gather(
+        *[
+            process_text(
+                filename=query,
+                upload_document=file_map[query]
+            )
+            for query in file_map
+        ]
+    )
     logger.info("Query embeddings batch processing completed")
 
     #get centroid embedding mean from query input
     logger.info("Starting update_query_centroid for all queries...")
-    await asyncio.gather(*[update_query_centroid(query=query,file_map=file_map)for query in file_map])
+    await asyncio.gather(
+        *[
+            update_query_centroid(
+                filename=query,
+                document=file_map[query]
+            )
+            for query in file_map
+        ]
+    )
     logger.info("update_query_centroid for all queries completed")
 
-    #update_top_k_collections per query
+    # #update_top_k_collections per query
     logger.info("Finding top k collections for all queries...")
-    await asyncio.gather(*[update_top_k_collections(query=query,file_map=file_map,top_k=request.top_k_collections)for query in file_map])
+    await asyncio.gather(
+        *[
+            update_top_k_collections(
+                query=query,
+                document=file_map[query],
+                top_k=requestParam.top_k_collections
+            )
+            for query in file_map
+        ]
+    )
+
     logger.info("update_top_k_collections for all queries completed")  
 
     #update_top_k_documents per query
     logger.info("Finding update_top_k_documents for all queries...")
-    await asyncio.gather(*[update_top_k_documents(query=query,file_map=file_map,top_k=request.top_k_documents)for query in file_map])
+    await asyncio.gather(
+        *[
+            update_top_k_documents(
+                query=query,
+                document=file_map[query],
+                top_k=requestParam.top_k_documents
+            )
+            for query in file_map
+        ]
+    )
     logger.info("update_top_k_documents for all queries completed")  
     
     
     return JSONResponse(
         content={
-            "state":file_map
+            "state": [upload_doc.to_dict() for filename, upload_doc in file_map.items()]
         }
     )
 

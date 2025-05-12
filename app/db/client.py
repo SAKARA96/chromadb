@@ -2,6 +2,8 @@ import chromadb
 from chromadb.config import Settings
 from chromadb.api.models.Collection import Collection
 from sklearn.metrics.pairwise import cosine_similarity
+from app.api.request import SearchDocument
+from app.document.extract import device
 import numpy as np
 import uuid
 import time
@@ -19,8 +21,8 @@ def get_or_create_collection(collection_name: str):
 #---------------------------------------------------------------------------------------------------------------
 
 async def add_to_collection(
-    text: str,
-    embedding: list[float],
+    text: List[str],
+    embedding: List[List[float]],
     doc_id: str,
     filename: str,
     collection: Collection = None
@@ -28,17 +30,13 @@ async def add_to_collection(
     # Log the function entry and input parameters
     logger.debug(f"add_to_collection called with doc_id: {doc_id}, filename: {filename}, collection: {collection}")
 
-    if collection == None:
-        logger.debug("No collection provided. Creating a new collection with the name 'test'.")
-        collection = get_or_create_collection(collection_name="test")
-
     try:
         logger.debug(f"Adding document to collection: {collection.name}")
         
         # Add the document to the collection
         collection.add(
-            documents=[text],
-            embeddings=[embedding],
+            documents=text,
+            embeddings=embedding,
             ids=[doc_id],
             metadatas=[{"filename": filename, "is_centroid":False}]
         )
@@ -167,37 +165,30 @@ async def top_1_collection(query_embedding: List[torch.Tensor], threshold: float
 
 #---------------------------------------------------------------------------------------------------------------
 
-async def update_query_centroid(query:str,file_map:dict ):
+async def update_query_centroid(filename:str, document:SearchDocument ):
     """
     Gets a file_map object and updates the centroid embedding of the object
     """
 
-    logger.debug(f"start update_query_centroid for query : {query}")
+    logger.debug(f"start update_query_centroid for query : {filename}")
     
     try:
-        query_object = file_map[query]
-        if query_object:
-            embeddings = torch.Tensor(query_object["embedding"]["content"])
-            all_embeddings = np.vstack(embeddings)
-            centroid = np.mean(all_embeddings, axis=0)
-            file_map[query]["centroid"] = {
-                "content":centroid.tolist(),
-                "error":None
-            }
-        else:
-            file_map[query]["centroid"] = {
-                "content":-1,
-                "error":f"Error calculating centroid"
-            }
+        
+        embeddings = document.embedding.content
+        stacked_embeddings = torch.stack(embeddings)
+        centroid = torch.mean(stacked_embeddings, dim=0)
+
+        document.centroid.content = [centroid]
+        document.centroid.error = None
 
     except Exception as e:
         logger.error(f"An error occurred while updating the centroid for query. Error: {str(e)}", exc_info=True)
     
-    logger.debug(f"Completed update_query_centroid for query : {query}")
+    logger.debug(f"Completed update_query_centroid for query : {filename}")
 
 #---------------------------------------------------------------------------------------------------------------
 
-async def update_top_k_collections(query:str, file_map:dict, top_k:int, threshold: float = 0.0):
+async def update_top_k_collections(query:str, document:SearchDocument, top_k:int, threshold: float = 0.0):
     """
     Gets a file_map and updates the top_k_collections for every query 
     """
@@ -205,49 +196,36 @@ async def update_top_k_collections(query:str, file_map:dict, top_k:int, threshol
     logger.debug(f"start update_top_k_collections for query : {query}")
 
     try:
-        query_object = file_map[query]
-        if query_object:
-            if not query_object["centroid"]["error"]:
-                query_centroid = torch.Tensor(file_map[query]["centroid"]["content"])
-                collections_list = chroma_client.list_collections()
+        if not document.centroid.error:
+            query_centroid = document.centroid.content
+            stacked_embeddings = torch.stack(query_centroid)
+            avg_query_embedding = torch.mean(stacked_embeddings, dim=0).to(device=device)
+            # avg_query_embedding = avg_query_embedding.to(device=device)
+            
+            collections_list = chroma_client.list_collections()
+            similarity_scores = []
 
-                similarity_scores = []
+            for collection in collections_list:
+                logger.debug(f"Fetching centroid for collection: {collection.name}")
+                centroid_doc = collection.get(ids=["centroid"], include=["embeddings"])
+                if len(centroid_doc['embeddings']) == 0:
+                    logger.warning(f"No centroid embedding found for collection: {collection.name}")
+                    continue
 
-                for collection in collections_list:
-                    logger.debug(f"Fetching centroid for collection: {collection.name}")
-                    centroid_doc = collection.get(ids=["centroid"], include=["embeddings"])
+                centroid_embedding = torch.Tensor(centroid_doc['embeddings'][0]).to(device=device)
+                similarity_score = torch.nn.functional.cosine_similarity(
+                    avg_query_embedding.unsqueeze(0), 
+                    centroid_embedding.unsqueeze(0), 
+                    dim=1
+                ).item()
 
-                    if len(centroid_doc['embeddings']) == 0:
-                        logger.warning(f"No centroid embedding found for collection: {collection.name}")
-                        continue
+                similarity_scores.append((collection.name, similarity_score))
 
-                    centroid_embedding = torch.Tensor(centroid_doc['embeddings'][0])  
-                    similarity_score = torch.nn.functional.cosine_similarity(
-                        query_centroid.unsqueeze(0), 
-                        centroid_embedding.unsqueeze(0), 
-                        dim=1
-                    ).item()
-
-                    similarity_scores.append((collection.name, similarity_score))
-
-                sorted_collections = sorted(similarity_scores, key=lambda x: x[1], reverse=True)
-
-                file_map[query]["top_k_collections"]={
-                    "content":sorted_collections,
-                    "error": None
-                }  
-
-            else:
-                file_map[query]["top_k_collections"] = {
-                "content":[],
-                "error": f"Error getting centroid for query"
-            }    
-        else:
-            file_map[query]["top_k_collections"] = {
-                "content":[],
-                "error": f"Error finding top_k_collections"
-            }
-
+            sorted_collections = sorted(similarity_scores, key=lambda x: x[1], reverse=True)
+            collection_names = [name for name, _ in sorted_collections]
+            
+            document.top_k_collections = collection_names
+        
     except Exception as e:
         logger.error(f"An error occuered while finding top_k_collections for query. Error: {str(e)}",exc_info=True)
 
@@ -255,7 +233,7 @@ async def update_top_k_collections(query:str, file_map:dict, top_k:int, threshol
 
 #---------------------------------------------------------------------------------------------------------------
 
-async def update_top_k_documents(query:str,file_map:dict,top_k:int):
+async def update_top_k_documents(query:str, document:SearchDocument, top_k:int, threshold: float = 0.0):
     """
     Gets a file_map and query and tries to find relevant documents from a collection to send as additional context
     """
@@ -263,33 +241,23 @@ async def update_top_k_documents(query:str,file_map:dict,top_k:int):
     logger.debug("start update_top_k_documents for query : {query}")
 
     try:
-        query_object = file_map[query]
-        if query_object:
-            query_embedding = query_object["embedding"]["content"]
-            collection_list = query_object["top_k_collections"]["content"]
-            file_map[query]["top_k_documents"] = {
-                "content":[],
-                "error":None
-            }
-            for collection_obj in collection_list:
-                collection_name = collection_obj[0]
-                logger.info(f"collection_name {collection_name}")
-                collection = chroma_client.get_collection(name=collection_name)
-                
-                results = collection.query(
-                    query_embeddings=query_embedding,
-                    n_results=top_k,include=["documents"],
-                    where={"is_centroid": False}
-                )
+        query_embedding = document.embedding.vectordb_embeddings
+        collection_list = document.top_k_collections
+        for collection_name in collection_list:
+            logger.debug(f"collection_name {collection_name}")
+            collection = chroma_client.get_collection(name=collection_name)
+            
+            results = collection.query(
+                query_embeddings=query_embedding,
+                n_results=top_k,
+                include=["documents"],
+                where={"is_centroid": False}
+            )
 
-                file_map[query]["top_k_documents"]["content"].extend(results["documents"][0])
-        else:
-            file_map[query]["top_k_documents"] = {
-                "content":[],
-                "error": f"Error finding top_k_documents"
-            }
+            if "documents" in results and results["documents"]:
+                for doc_list in results["documents"]:
+                    document.top_k_results.extend(doc_list)
 
-    
     except Exception as e:
         logger.error(f"An error occuered while finding top_k_documents for query. Error : {str(e)}",exc_info=True)
     
