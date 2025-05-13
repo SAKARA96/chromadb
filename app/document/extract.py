@@ -9,6 +9,8 @@ from app.logger import logger
 import torch
 from typing import List
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader
+import tempfile
 
 # Determine device based on platform capabilities
 if torch.cuda.is_available():
@@ -77,10 +79,6 @@ async def extract_text(file_obj, filename: str) -> str:
 
 #---------------------------------------------------------------------------------------------------------------
 
-# Helper function to handle PDF processing in a separate thread
-def process_pdf(file_obj):
-    with pdfplumber.open(file_obj) as pdf:
-        return "\n".join(page.extract_text() or "" for page in pdf.pages)
 
 # Helper function to handle DOCX processing in a separate thread
 def process_docx(file_obj):
@@ -99,3 +97,21 @@ def _generate_embeddings(texts: List[str]) -> List[torch.Tensor]:
         embedding = model.encode(text, convert_to_tensor=True)
         embeddings_list.append(embedding)
     return embeddings_list
+
+# Helper function to handle PDF processing in a separate thread
+def process_pdf(file_obj):
+    # Write the file object to a temporary file because PyPDFLoader expects a file path
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        tmp_file.write(file_obj.read())
+        tmp_file_path = tmp_file.name
+    
+    try:
+        # Use LangChain's PyPDFLoader
+        loader = PyPDFLoader(tmp_file_path)
+        documents = loader.load()
+        text = "\n".join(doc.page_content for doc in documents)
+    finally:
+        # Ensure the temporary file is deleted even if an error occurs
+        os.remove(tmp_file_path)
+
+    return text
