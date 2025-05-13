@@ -130,7 +130,7 @@ async def top_1_collection(query_embedding: List[torch.Tensor], threshold: float
     avg_query_embedding = torch.mean(stacked_embeddings, dim=0).to(device=device)
     
     best_collection = None
-    highest_similarity = -1
+    highest_similarity = threshold
 
     # Iterate through each collection to retrieve the centroid and compute similarity
     for collection_name in collection_names:
@@ -199,7 +199,7 @@ async def update_query_centroid(filename:str, document:SearchDocument ):
 
 #---------------------------------------------------------------------------------------------------------------
 
-async def update_top_k_collections(query:str, document:SearchDocument, top_k:int, threshold: float = 0.0):
+async def update_top_k_collections(query:str, document:SearchDocument, top_k:int, threshold: float = 0.25):
     """
     Gets a file_map and updates the top_k_collections for every query 
     """
@@ -229,7 +229,9 @@ async def update_top_k_collections(query:str, document:SearchDocument, top_k:int
                     dim=1
                 ).item()
 
-                similarity_scores.append((collection.name, similarity_score))
+                if similarity_score >= threshold:
+                    logger.info(f"collection_name:{collection.name} similarity_score:{similarity_score}")
+                    similarity_scores.append((collection.name, similarity_score))
 
             sorted_collections = sorted(similarity_scores, key=lambda x: x[1], reverse=True)
             collection_names = [name for name, _ in sorted_collections[:top_k]]

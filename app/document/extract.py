@@ -21,12 +21,13 @@ else:
     device = 'cpu'
 
 # Load model with correct device
-model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
+# model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
+model = SentenceTransformer('all-mpnet-base-v2', device=device)
 
 #text_splitter to chunk input document
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500,      
-    chunk_overlap=50,    
+    chunk_size=1000,      
+    chunk_overlap=150,    
     separators=["\n\n", "\n", ".", " ", ""],
 )
 
